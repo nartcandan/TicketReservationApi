@@ -91,6 +91,7 @@ contains ready-made requests that log in and reuse the tokens (Visual Studio / V
 | PATCH | `/api/events/{id}/cancel` | Admin | Cancel an event and its reservations |
 | GET | `/api/events/{id}/reservations` | Admin | Reservations of an event |
 | POST | `/api/reservations` | User | Reserve a seat: `{ "eventId": "…" }` |
+| GET | `/api/reservations/{id}` | User | One of my reservations |
 | GET | `/api/reservations/me` | User | My reservations |
 | PATCH | `/api/reservations/{id}/cancel` | User | Cancel my reservation |
 

@@ -21,8 +21,13 @@ public class ReservationsController(IReservationService reservationService) : Co
     public async Task<ActionResult<ReservationResponse>> Create(CreateReservationRequest request, CancellationToken cancellationToken)
     {
         var created = await reservationService.CreateAsync(User.GetUserId(), request, cancellationToken);
-        return Created($"/api/reservations/{created.Id}", created);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
+
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ReservationResponse>> GetById(Guid id, CancellationToken cancellationToken) =>
+        Ok(await reservationService.GetByIdAsync(id, User.GetUserId(), cancellationToken));
 
     [HttpGet("me")]
     public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetMine(CancellationToken cancellationToken) =>

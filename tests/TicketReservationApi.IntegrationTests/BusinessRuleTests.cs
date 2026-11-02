@@ -121,6 +121,17 @@ public class BusinessRuleTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task K7_viewing_someone_elses_reservation_returns_404()
+    {
+        var eventId = await factory.SeedEventAsync(capacity: 10);
+        var created = await (await UserClientAsync()).PostAsJsonAsync("/api/reservations", new { eventId });
+
+        var response = await (await UserClientAsync()).GetAsync(created.Headers.Location);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task K8_cancelling_an_event_cancels_its_reservations()
     {
         var eventId = await factory.SeedEventAsync(capacity: 10);

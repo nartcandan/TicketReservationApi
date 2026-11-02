@@ -93,6 +93,11 @@ Content-Type: application/json
   "eventId": "{{eventId}}"
 }
 
+### Get reservation (user, own only)
+GET {{TicketReservationApi_HostAddress}}/api/reservations/{{reservationId}}
+Authorization: Bearer {{userLogin.response.body.$.token}}
+Accept: application/json
+
 ### My reservations (user)
 GET {{TicketReservationApi_HostAddress}}/api/reservations/me
 Authorization: Bearer {{userLogin.response.body.$.token}}

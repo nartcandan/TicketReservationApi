@@ -11,6 +11,7 @@ public interface IReservationService
 {
     Task<ReservationResponse> CreateAsync(Guid userId, CreateReservationRequest request, CancellationToken cancellationToken);
     Task<ReservationResponse> CancelAsync(Guid id, Guid userId, CancellationToken cancellationToken);
+    Task<ReservationResponse> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ReservationResponse>> GetForUserAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ReservationResponse>> GetForEventAsync(Guid eventId, CancellationToken cancellationToken);
 }
@@ -110,6 +111,18 @@ public class ReservationService(
 
         reservation.Status = ReservationStatus.Cancelled;
         reservation.CancelledAt = now;
+
+        return ReservationResponse.From(reservation);
+    }
+
+    public async Task<ReservationResponse> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        // K7: filtering by owner makes someone else's reservation indistinguishable from a missing one
+        var reservation = await db.Reservations
+            .AsNoTracking()
+            .Include(r => r.Event)
+            .FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Reservation), id);
 
         return ReservationResponse.From(reservation);
     }

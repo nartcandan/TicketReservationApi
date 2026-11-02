@@ -108,6 +108,22 @@ public class AuthTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task Created_reservation_location_points_to_the_reservation()
+    {
+        var eventId = await factory.SeedEventAsync(capacity: 5);
+        var client = factory.CreateClientFor(await factory.SeedUserAsync());
+
+        var created = await client.PostAsJsonAsync("/api/reservations", new { eventId });
+        var createdBody = await created.Content.ReadFromJsonAsync<IdResponse>();
+
+        Assert.NotNull(created.Headers.Location);
+        var fetched = await client.GetAsync(created.Headers.Location);
+
+        Assert.Equal(HttpStatusCode.OK, fetched.StatusCode);
+        Assert.Equal(createdBody!.Id, (await fetched.Content.ReadFromJsonAsync<IdResponse>())!.Id);
+    }
+
+    [Fact]
     public async Task Users_cannot_see_or_cancel_reservations_of_others()
     {
         var eventId = await factory.SeedEventAsync(capacity: 5);

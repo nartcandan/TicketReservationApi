@@ -139,6 +139,7 @@ Paged response format:
 | Method | Path | Access | Description |
 |---|---|---|---|
 | POST | `/api/reservations` | User | Make a reservation (K1, K2, K3) |
+| GET | `/api/reservations/{id}` | User | One of my reservations (K7) |
 | GET | `/api/reservations/me` | User | My reservations |
 | PATCH | `/api/reservations/{id}/cancel` | User | Cancel (K4, K5, K7) |
 
