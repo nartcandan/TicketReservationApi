@@ -24,8 +24,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
             .HasConversion<string>()
             .HasMaxLength(20);
 
-        // EXPERIMENT (PLAN.md, step 4): concurrency check temporarily disabled to reproduce overbooking
-        builder.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken(false);
+        builder.Property(e => e.RowVersion).IsRowVersion();
 
         builder.HasIndex(e => e.StartsAt);
     }
