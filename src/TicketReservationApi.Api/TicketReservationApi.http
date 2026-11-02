@@ -1,3 +1,39 @@
 @TicketReservationApi_HostAddress = http://localhost:5133
+@eventId = 00000000-0000-0000-0000-000000000000
+
+### List events
+GET {{TicketReservationApi_HostAddress}}/api/events
+Accept: application/json
+
+### Get event
+GET {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}
+Accept: application/json
+
+### Create event
+POST {{TicketReservationApi_HostAddress}}/api/events
+Content-Type: application/json
+
+{
+  "title": "Konser",
+  "description": "Açık hava konseri",
+  "venue": "Salon A",
+  "startsAt": "2026-12-31T20:00:00Z",
+  "capacity": 100
+}
+
+### Update event
+PUT {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}
+Content-Type: application/json
+
+{
+  "title": "Konser",
+  "description": "Açık hava konseri",
+  "venue": "Salon B",
+  "startsAt": "2026-12-31T21:00:00Z",
+  "capacity": 120
+}
+
+### Cancel event
+PATCH {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}/cancel
 
 ###

@@ -205,7 +205,7 @@ tests/
 ## 8. Geliştirme Sırası
 
 - [x] **1. Kurulum** — Solution ve katmanlar, yerel MSSQL, DbContext, `Event` entity'si, ilk migration
-- [ ] **2. Event CRUD** — DTO'lar, FluentValidation, global hata yönetimi, OpenAPI + Scalar
+- [x] **2. Event CRUD** — DTO'lar, FluentValidation, global hata yönetimi, OpenAPI + Scalar
 - [ ] **3. Rezervasyon** — `User` (seed'li test kullanıcıları) ve `Reservation` entity'leri, ilişkiler; oluşturma ve iptal (auth yok, `UserId` body'den)
 - [ ] **4. Concurrency deneyi** — Bölüm 7; integration test projesi burada kurulur
 - [ ] **5. Auth** — Register / login, JWT, roller, admin seed; `UserId` artık token'dan
