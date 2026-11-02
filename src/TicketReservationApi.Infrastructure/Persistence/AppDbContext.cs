@@ -7,6 +7,8 @@ namespace TicketReservationApi.Infrastructure.Persistence;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IAppDbContext
 {
     public DbSet<Event> Events => Set<Event>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Reservation> Reservations => Set<Reservation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

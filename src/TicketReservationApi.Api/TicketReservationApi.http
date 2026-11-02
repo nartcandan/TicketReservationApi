@@ -1,5 +1,8 @@
 @TicketReservationApi_HostAddress = http://localhost:5133
 @eventId = 00000000-0000-0000-0000-000000000000
+@reservationId = 00000000-0000-0000-0000-000000000000
+# Development seed users (DevDataSeeder): ali, ayse, can
+@userId = 11111111-1111-1111-1111-111111111111
 
 ### List events
 GET {{TicketReservationApi_HostAddress}}/api/events
@@ -35,5 +38,30 @@ Content-Type: application/json
 
 ### Cancel event
 PATCH {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}/cancel
+
+### Event reservations
+GET {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}/reservations
+Accept: application/json
+
+### Create reservation
+POST {{TicketReservationApi_HostAddress}}/api/reservations
+Content-Type: application/json
+
+{
+  "eventId": "{{eventId}}",
+  "userId": "{{userId}}"
+}
+
+### My reservations
+GET {{TicketReservationApi_HostAddress}}/api/reservations/me?userId={{userId}}
+Accept: application/json
+
+### Cancel reservation
+PATCH {{TicketReservationApi_HostAddress}}/api/reservations/{{reservationId}}/cancel
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}"
+}
 
 ###

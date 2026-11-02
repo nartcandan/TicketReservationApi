@@ -6,6 +6,8 @@ namespace TicketReservationApi.Application.Common.Interfaces;
 public interface IAppDbContext
 {
     DbSet<Event> Events { get; }
+    DbSet<User> Users { get; }
+    DbSet<Reservation> Reservations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -30,7 +30,7 @@ public sealed class GlobalExceptionHandler(
                 Title = "One or more validation errors occurred."
             },
             NotFoundException e => Problem(StatusCodes.Status404NotFound, "Resource not found.", e.Message),
-            ConflictException e => Problem(StatusCodes.Status409Conflict, "Conflict.", e.Message),
+            ConflictException e => Problem(StatusCodes.Status409Conflict, "Conflict.", e.Message, e.Rule),
             BusinessRuleException e => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violation.", e.Message, e.Rule),
             DbUpdateConcurrencyException => Problem(StatusCodes.Status409Conflict, "Conflict.",
                 "The resource was modified by another request. Please retry."),

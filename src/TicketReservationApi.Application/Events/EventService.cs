@@ -89,12 +89,25 @@ public class EventService(
 
     public async Task CancelAsync(Guid id, CancellationToken cancellationToken)
     {
-        var ev = await FindAsync(id, cancellationToken);
+        var ev = await db.Events
+            .Include(e => e.Reservations.Where(r => r.Status == ReservationStatus.Active))
+            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken)
+            ?? throw new NotFoundException(nameof(Event), id);
 
         EnsureModifiable(ev);
 
-        // K8 (cancelling active reservations) is added together with Reservation in step 3
+        var now = timeProvider.GetUtcNow();
+
         ev.Status = EventStatus.Cancelled;
+
+        // K8
+        foreach (var reservation in ev.Reservations)
+        {
+            reservation.Status = ReservationStatus.Cancelled;
+            reservation.CancelledAt = now;
+        }
+
+        ev.ReservedCount = 0;
 
         await db.SaveChangesAsync(cancellationToken);
     }

@@ -17,4 +17,6 @@ public class Event
     public byte[] RowVersion { get; set; } = [];
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    public ICollection<Reservation> Reservations { get; } = [];
 }

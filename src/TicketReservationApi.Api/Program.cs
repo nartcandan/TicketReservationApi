@@ -2,6 +2,7 @@ using Scalar.AspNetCore;
 using TicketReservationApi.Api.ErrorHandling;
 using TicketReservationApi.Application;
 using TicketReservationApi.Infrastructure;
+using TicketReservationApi.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,11 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+
+    using var scope = app.Services.CreateScope();
+    await DevDataSeeder.SeedAsync(
+        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
+        scope.ServiceProvider.GetRequiredService<TimeProvider>());
 }
 
 app.UseHttpsRedirection();
@@ -36,7 +42,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+await app.RunAsync();
 
 // Exposed for WebApplicationFactory in integration tests
 public partial class Program;

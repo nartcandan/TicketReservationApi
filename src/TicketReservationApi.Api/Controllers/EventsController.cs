@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using TicketReservationApi.Application.Events;
+using TicketReservationApi.Application.Reservations;
 
 namespace TicketReservationApi.Api.Controllers;
 
@@ -42,4 +43,12 @@ public class EventsController(IEventService eventService) : ControllerBase
         await eventService.CancelAsync(id, cancellationToken);
         return NoContent();
     }
+
+    [HttpGet("{id:guid}/reservations")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ReservationResponse>>> GetReservations(
+        Guid id,
+        [FromServices] IReservationService reservationService,
+        CancellationToken cancellationToken) =>
+        Ok(await reservationService.GetForEventAsync(id, cancellationToken));
 }
