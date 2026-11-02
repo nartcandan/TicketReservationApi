@@ -55,6 +55,26 @@ public class ConcurrencyTests(ApiFactory factory)
             await SummarizeAsync(eventId, statusCodes));
     }
 
+    [Fact]
+    public async Task Parallel_cancellations_release_the_seat_once()
+    {
+        var eventId = await factory.SeedEventAsync(capacity: 1);
+        var userId = (await factory.SeedUsersAsync(1))[0];
+        var client = factory.CreateClient();
+
+        var created = await client.PostAsJsonAsync("/api/reservations", new { eventId, userId });
+        var reservation = await created.Content.ReadFromJsonAsync<IdResponse>();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, ParallelRequests).Select(_ =>
+            client.PatchAsJsonAsync($"/api/reservations/{reservation!.Id}/cancel", new { userId })));
+
+        Assert.Equal(
+            "200 x1, 422 x9 | ReservedCount=0, ActiveReservations=0",
+            await SummarizeAsync(eventId, responses.Select(r => r.StatusCode).ToArray()));
+    }
+
+    private record IdResponse(Guid Id);
+
     private async Task<HttpStatusCode[]> SendInParallelAsync(IEnumerable<(Guid EventId, Guid UserId)> requests)
     {
         var client = factory.CreateClient();

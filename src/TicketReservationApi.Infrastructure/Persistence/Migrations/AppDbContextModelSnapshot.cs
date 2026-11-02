@@ -104,7 +104,9 @@ namespace TicketReservationApi.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("EventId", "UserId");
+                    b.HasIndex("EventId", "UserId")
+                        .IsUnique()
+                        .HasFilter("[Status] = 'Active'");
 
                     b.ToTable("Reservations", (string)null);
                 });

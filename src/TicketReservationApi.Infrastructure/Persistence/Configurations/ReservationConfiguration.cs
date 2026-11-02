@@ -26,9 +26,10 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
             .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Intentionally not unique yet: the filtered unique index guaranteeing K2
-        // is added during the concurrency experiment (PLAN.md, step 4).
-        builder.HasIndex(r => new { r.EventId, r.UserId });
+        // K2: at most one active reservation per user and event, enforced by the database
+        builder.HasIndex(r => new { r.EventId, r.UserId })
+            .IsUnique()
+            .HasFilter("[Status] = 'Active'");
         builder.HasIndex(r => r.UserId);
     }
 }

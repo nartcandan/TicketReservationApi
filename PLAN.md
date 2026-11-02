@@ -207,7 +207,7 @@ tests/
 - [x] **1. Kurulum** — Solution ve katmanlar, yerel MSSQL, DbContext, `Event` entity'si, ilk migration
 - [x] **2. Event CRUD** — DTO'lar, FluentValidation, global hata yönetimi, OpenAPI + Scalar
 - [x] **3. Rezervasyon** — `User` (seed'li test kullanıcıları) ve `Reservation` entity'leri, ilişkiler; oluşturma ve iptal (auth yok, `UserId` body'den)
-- [ ] **4. Concurrency deneyi** — Bölüm 7; integration test projesi burada kurulur
+- [x] **4. Concurrency deneyi** — Bölüm 7; integration test projesi burada kurulur
 - [ ] **5. Auth** — Register / login, JWT, roller, admin seed; `UserId` artık token'dan
 - [ ] **6. İş kuralları ve sorgular** — Kalan kurallar (K3–K9), filtreleme, sayfalama
 - [ ] **7. Test ve dokümantasyon** — Unit testler (K1–K9), kalan integration testler, README
@@ -230,3 +230,6 @@ tests/
 | 2026-11-02 | `TimeProvider` ile zaman soyutlaması | Zamana bağlı kuralların deterministik testi |
 | 2026-11-02 | Admin seed ile oluşturulur, register yalnızca `User` | Yetki yükseltmeyi engellemek |
 | 2026-11-02 | NSubstitute, Scalar, `PasswordHasher<User>` | Sade bağımlılıklar; tam Identity gereksiz |
+| 2026-11-02 | Rezervasyonda atomik `UPDATE … WHERE ReservedCount < Capacity` + filtered unique index | Optimistic concurrency doğru ama boş yer varken de false conflict üretiyor (deney sonucu, README) |
+| 2026-11-02 | Rezervasyon iptali de koşullu `UPDATE … WHERE Status = 'Active'` | Eşzamanlı iptallerde koltuğun iki kez serbest bırakılmaması |
+| 2026-11-02 | `RowVersion` admin işlemleri için korunur | Eski veriyle yapılan admin güncellemesi `ReservedCount`'u ezmesin |

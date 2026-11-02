@@ -23,7 +23,8 @@ public class ReservationService(
 {
     private static readonly TimeSpan CancellationCutoff = TimeSpan.FromHours(24);
 
-    // Naive check-then-act: no protection against concurrent requests yet (PLAN.md, step 4).
+    // The checks below give early, descriptive errors. Under concurrency the real guarantees are
+    // the atomic conditional UPDATE (K1) and the filtered unique index (K2). See PLAN.md, section 7.
     public async Task<ReservationResponse> CreateAsync(CreateReservationRequest request, CancellationToken cancellationToken)
     {
         await createValidator.ValidateAndThrowAsync(request, cancellationToken);
@@ -63,8 +64,17 @@ public class ReservationService(
             throw new ConflictException("K1", "Event is fully booked.");
         }
 
-        // EXPERIMENT (PLAN.md, step 4): widens the race window between check and save
-        await Task.Delay(200, cancellationToken);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // K1: check and increment in a single statement; the row lock serializes concurrent requests
+        var incremented = await db.Events
+            .Where(e => e.Id == ev.Id && e.Status == EventStatus.Active && e.ReservedCount < e.Capacity)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.ReservedCount, e => e.ReservedCount + 1), cancellationToken);
+
+        if (incremented == 0)
+        {
+            throw new ConflictException("K1", "Event is fully booked.");
+        }
 
         var reservation = new Reservation
         {
@@ -76,9 +86,10 @@ public class ReservationService(
         };
 
         db.Reservations.Add(reservation);
-        ev.ReservedCount++;
 
+        // K2: a concurrent duplicate violates the filtered unique index here (-> 409) and the transaction rolls back
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return ReservationResponse.From(reservation);
     }
@@ -88,6 +99,7 @@ public class ReservationService(
         await cancelValidator.ValidateAndThrowAsync(request, cancellationToken);
 
         var reservation = await db.Reservations
+            .AsNoTracking()
             .Include(r => r.Event)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
@@ -111,13 +123,29 @@ public class ReservationService(
                 "Reservations cannot be cancelled less than 24 hours before the event starts.");
         }
 
-        reservation.Status = ReservationStatus.Cancelled;
-        reservation.CancelledAt = now;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Conditional on Status so that two concurrent cancels cannot both release the seat
+        var cancelled = await db.Reservations
+            .Where(r => r.Id == id && r.Status == ReservationStatus.Active)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, ReservationStatus.Cancelled)
+                .SetProperty(r => r.CancelledAt, now), cancellationToken);
+
+        if (cancelled == 0)
+        {
+            throw new BusinessRuleException(null, "Reservation is already cancelled.");
+        }
 
         // K5
-        reservation.Event.ReservedCount--;
+        await db.Events
+            .Where(e => e.Id == reservation.EventId)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.ReservedCount, e => e.ReservedCount - 1), cancellationToken);
 
-        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        reservation.Status = ReservationStatus.Cancelled;
+        reservation.CancelledAt = now;
 
         return ReservationResponse.From(reservation);
     }
