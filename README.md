@@ -11,6 +11,17 @@ See [PLAN.md](PLAN.md) for scope, business rules (K1–K9), endpoints and the de
 Requirements: .NET 10 SDK and a local SQL Server instance reachable as `.` with Windows authentication
 (connection string in `src/TicketReservationApi.Api/appsettings.json`).
 
+Secrets are not stored in the repository. Set them once with user-secrets (the JWT signing key must be at
+least 32 bytes; the app refuses to start otherwise):
+
+```bash
+cd src/TicketReservationApi.Api
+dotnet user-secrets set "Jwt:SigningKey" "<random string of 32+ bytes>"
+dotnet user-secrets set "Admin:Email" "admin@ticketreservation.local"
+dotnet user-secrets set "Admin:Password" "<admin password>"
+cd ../..
+```
+
 ```bash
 dotnet tool restore
 dotnet ef database update -p src/TicketReservationApi.Infrastructure -s src/TicketReservationApi.Api
@@ -18,6 +29,16 @@ dotnet run --project src/TicketReservationApi.Api
 ```
 
 API reference (Scalar): http://localhost:5133/scalar/v1
+
+### Authentication
+
+- `POST /api/auth/register` always creates a `User`. The `Admin` account is created at startup from the
+  `Admin:*` settings.
+- `POST /api/auth/login` returns a JWT (`{ token, expiresAt }`). Send it as `Authorization: Bearer <token>`.
+- In Development, three test users are seeded: `ali@test.local`, `ayse@test.local`, `can@test.local`,
+  all with the password `Passw0rd!`.
+- [`TicketReservationApi.http`](src/TicketReservationApi.Api/TicketReservationApi.http) logs in and reuses
+  the tokens automatically (Visual Studio / VS Code REST Client).
 
 Integration tests create and use a separate `TicketReservation_Tests` database:
 

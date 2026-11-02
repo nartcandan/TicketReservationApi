@@ -2,10 +2,7 @@ using TicketReservationApi.Domain.Entities;
 
 namespace TicketReservationApi.Application.Reservations;
 
-// TODO (step 5): UserId comes from the JWT instead of the request
-public record CreateReservationRequest(Guid EventId, Guid UserId);
-
-public record CancelReservationRequest(Guid UserId);
+public record CreateReservationRequest(Guid EventId);
 
 public record ReservationResponse(
     Guid Id,

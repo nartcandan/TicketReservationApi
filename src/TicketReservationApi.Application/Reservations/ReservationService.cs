@@ -9,8 +9,8 @@ namespace TicketReservationApi.Application.Reservations;
 
 public interface IReservationService
 {
-    Task<ReservationResponse> CreateAsync(CreateReservationRequest request, CancellationToken cancellationToken);
-    Task<ReservationResponse> CancelAsync(Guid id, CancelReservationRequest request, CancellationToken cancellationToken);
+    Task<ReservationResponse> CreateAsync(Guid userId, CreateReservationRequest request, CancellationToken cancellationToken);
+    Task<ReservationResponse> CancelAsync(Guid id, Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ReservationResponse>> GetForUserAsync(Guid userId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ReservationResponse>> GetForEventAsync(Guid eventId, CancellationToken cancellationToken);
 }
@@ -18,21 +18,15 @@ public interface IReservationService
 public class ReservationService(
     IAppDbContext db,
     TimeProvider timeProvider,
-    IValidator<CreateReservationRequest> createValidator,
-    IValidator<CancelReservationRequest> cancelValidator) : IReservationService
+    IValidator<CreateReservationRequest> createValidator) : IReservationService
 {
     private static readonly TimeSpan CancellationCutoff = TimeSpan.FromHours(24);
 
     // The checks below give early, descriptive errors. Under concurrency the real guarantees are
     // the atomic conditional UPDATE (K1) and the filtered unique index (K2). See PLAN.md, section 7.
-    public async Task<ReservationResponse> CreateAsync(CreateReservationRequest request, CancellationToken cancellationToken)
+    public async Task<ReservationResponse> CreateAsync(Guid userId, CreateReservationRequest request, CancellationToken cancellationToken)
     {
         await createValidator.ValidateAndThrowAsync(request, cancellationToken);
-
-        if (!await db.Users.AnyAsync(u => u.Id == request.UserId, cancellationToken))
-        {
-            throw new NotFoundException(nameof(User), request.UserId);
-        }
 
         var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken)
             ?? throw new NotFoundException(nameof(Event), request.EventId);
@@ -50,7 +44,7 @@ public class ReservationService(
 
         // K2
         var alreadyReserved = await db.Reservations.AnyAsync(
-            r => r.EventId == ev.Id && r.UserId == request.UserId && r.Status == ReservationStatus.Active,
+            r => r.EventId == ev.Id && r.UserId == userId && r.Status == ReservationStatus.Active,
             cancellationToken);
 
         if (alreadyReserved)
@@ -81,7 +75,7 @@ public class ReservationService(
             Id = Guid.CreateVersion7(),
             EventId = ev.Id,
             Event = ev,
-            UserId = request.UserId,
+            UserId = userId,
             CreatedAt = timeProvider.GetUtcNow()
         };
 
@@ -94,17 +88,15 @@ public class ReservationService(
         return ReservationResponse.From(reservation);
     }
 
-    public async Task<ReservationResponse> CancelAsync(Guid id, CancelReservationRequest request, CancellationToken cancellationToken)
+    public async Task<ReservationResponse> CancelAsync(Guid id, Guid userId, CancellationToken cancellationToken)
     {
-        await cancelValidator.ValidateAndThrowAsync(request, cancellationToken);
-
         var reservation = await db.Reservations
             .AsNoTracking()
             .Include(r => r.Event)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
         // K7: someone else's reservation is reported as not found
-        if (reservation is null || reservation.UserId != request.UserId)
+        if (reservation is null || reservation.UserId != userId)
         {
             throw new NotFoundException(nameof(Reservation), id);
         }

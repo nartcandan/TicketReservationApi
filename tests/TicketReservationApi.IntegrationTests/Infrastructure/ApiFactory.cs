@@ -1,8 +1,11 @@
+using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using TicketReservationApi.Application.Common.Interfaces;
 using TicketReservationApi.Domain.Entities;
+using TicketReservationApi.Domain.Enums;
 using TicketReservationApi.Infrastructure.Persistence;
 
 namespace TicketReservationApi.IntegrationTests.Infrastructure;
@@ -19,6 +22,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Default", ConnectionString);
+        builder.UseSetting("Jwt:SigningKey", "integration-tests-signing-key-not-a-secret-0123456789");
     }
 
     public async Task InitializeAsync()
@@ -33,16 +37,27 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public AppDbContext CreateDbContext() =>
         Services.CreateScope().ServiceProvider.GetRequiredService<AppDbContext>();
 
-    public async Task<Guid> SeedEventAsync(int capacity)
+    /// <summary>Client authenticated as <paramref name="user"/> with a real access token.</summary>
+    public HttpClient CreateClientFor(User user)
+    {
+        var token = Services.GetRequiredService<IAccessTokenGenerator>().Generate(user);
+
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+
+        return client;
+    }
+
+    public async Task<Guid> SeedEventAsync(int capacity, DateTimeOffset? startsAt = null)
     {
         await using var db = CreateDbContext();
 
         var ev = new Event
         {
             Id = Guid.CreateVersion7(),
-            Title = "Concurrency test",
+            Title = "Test event",
             Venue = "Test venue",
-            StartsAt = DateTimeOffset.UtcNow.AddDays(30),
+            StartsAt = startsAt ?? DateTimeOffset.UtcNow.AddDays(30),
             Capacity = capacity,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -53,7 +68,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         return ev.Id;
     }
 
-    public async Task<IReadOnlyList<Guid>> SeedUsersAsync(int count)
+    public async Task<IReadOnlyList<User>> SeedUsersAsync(int count, UserRole role = UserRole.User)
     {
         await using var db = CreateDbContext();
 
@@ -63,6 +78,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
                 Id = Guid.CreateVersion7(),
                 Email = $"{Guid.NewGuid():N}@test.local",
                 FullName = "Test User",
+                Role = role,
                 CreatedAt = DateTimeOffset.UtcNow
             })
             .ToList();
@@ -70,8 +86,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         db.Users.AddRange(users);
         await db.SaveChangesAsync();
 
-        return users.Select(u => u.Id).ToList();
+        return users;
     }
+
+    public async Task<User> SeedUserAsync(UserRole role = UserRole.User) => (await SeedUsersAsync(1, role))[0];
 }
 
 [CollectionDefinition(nameof(ApiCollection))]

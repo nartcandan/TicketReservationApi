@@ -1,19 +1,53 @@
 @TicketReservationApi_HostAddress = http://localhost:5133
 @eventId = 00000000-0000-0000-0000-000000000000
 @reservationId = 00000000-0000-0000-0000-000000000000
-# Development seed users (DevDataSeeder): ali, ayse, can
-@userId = 11111111-1111-1111-1111-111111111111
 
-### List events
+# Development seed users (ali, ayse, can @test.local) share the password "Passw0rd!".
+# The admin account comes from user-secrets: dotnet user-secrets list --project src/TicketReservationApi.Api
+@adminEmail = admin@ticketreservation.local
+@adminPassword = <from user-secrets>
+
+### Login as user
+# @name userLogin
+POST {{TicketReservationApi_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ali@test.local",
+  "password": "Passw0rd!"
+}
+
+### Login as admin
+# @name adminLogin
+POST {{TicketReservationApi_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### Register
+POST {{TicketReservationApi_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "new.user@test.local",
+  "password": "Passw0rd!",
+  "fullName": "New User"
+}
+
+### List events (public)
 GET {{TicketReservationApi_HostAddress}}/api/events
 Accept: application/json
 
-### Get event
+### Get event (public)
 GET {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}
 Accept: application/json
 
-### Create event
+### Create event (admin)
 POST {{TicketReservationApi_HostAddress}}/api/events
+Authorization: Bearer {{adminLogin.response.body.$.token}}
 Content-Type: application/json
 
 {
@@ -24,8 +58,9 @@ Content-Type: application/json
   "capacity": 100
 }
 
-### Update event
+### Update event (admin)
 PUT {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}
+Authorization: Bearer {{adminLogin.response.body.$.token}}
 Content-Type: application/json
 
 {
@@ -36,32 +71,31 @@ Content-Type: application/json
   "capacity": 120
 }
 
-### Cancel event
+### Cancel event (admin)
 PATCH {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}/cancel
+Authorization: Bearer {{adminLogin.response.body.$.token}}
 
-### Event reservations
+### Event reservations (admin)
 GET {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}/reservations
+Authorization: Bearer {{adminLogin.response.body.$.token}}
 Accept: application/json
 
-### Create reservation
+### Create reservation (user)
 POST {{TicketReservationApi_HostAddress}}/api/reservations
+Authorization: Bearer {{userLogin.response.body.$.token}}
 Content-Type: application/json
 
 {
-  "eventId": "{{eventId}}",
-  "userId": "{{userId}}"
+  "eventId": "{{eventId}}"
 }
 
-### My reservations
-GET {{TicketReservationApi_HostAddress}}/api/reservations/me?userId={{userId}}
+### My reservations (user)
+GET {{TicketReservationApi_HostAddress}}/api/reservations/me
+Authorization: Bearer {{userLogin.response.body.$.token}}
 Accept: application/json
 
-### Cancel reservation
+### Cancel reservation (user)
 PATCH {{TicketReservationApi_HostAddress}}/api/reservations/{{reservationId}}/cancel
-Content-Type: application/json
-
-{
-  "userId": "{{userId}}"
-}
+Authorization: Bearer {{userLogin.response.body.$.token}}
 
 ###

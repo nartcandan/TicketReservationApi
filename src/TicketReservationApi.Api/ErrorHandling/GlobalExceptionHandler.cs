@@ -29,6 +29,7 @@ public sealed class GlobalExceptionHandler(
                 Status = StatusCodes.Status400BadRequest,
                 Title = "One or more validation errors occurred."
             },
+            AuthenticationFailedException e => Problem(StatusCodes.Status401Unauthorized, "Authentication failed.", e.Message),
             NotFoundException e => Problem(StatusCodes.Status404NotFound, "Resource not found.", e.Message),
             ConflictException e => Problem(StatusCodes.Status409Conflict, "Conflict.", e.Message, e.Rule),
             BusinessRuleException e => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violation.", e.Message, e.Rule),

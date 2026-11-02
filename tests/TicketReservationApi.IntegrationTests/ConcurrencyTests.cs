@@ -20,9 +20,9 @@ public class ConcurrencyTests(ApiFactory factory)
     public async Task Parallel_requests_for_a_single_seat_book_exactly_one()
     {
         var eventId = await factory.SeedEventAsync(capacity: 1);
-        var userIds = await factory.SeedUsersAsync(ParallelRequests);
+        var clients = (await factory.SeedUsersAsync(ParallelRequests)).Select(factory.CreateClientFor);
 
-        var statusCodes = await SendInParallelAsync(userIds.Select(userId => (eventId, userId)));
+        var statusCodes = await ReserveInParallelAsync(eventId, clients);
 
         Assert.Equal(
             "201 x1, 409 x9 | ReservedCount=1, ActiveReservations=1",
@@ -33,9 +33,9 @@ public class ConcurrencyTests(ApiFactory factory)
     public async Task Parallel_requests_by_the_same_user_create_one_reservation()
     {
         var eventId = await factory.SeedEventAsync(capacity: 100);
-        var userId = (await factory.SeedUsersAsync(1))[0];
+        var client = factory.CreateClientFor(await factory.SeedUserAsync());
 
-        var statusCodes = await SendInParallelAsync(Enumerable.Repeat((eventId, userId), ParallelRequests));
+        var statusCodes = await ReserveInParallelAsync(eventId, Enumerable.Repeat(client, ParallelRequests));
 
         Assert.Equal(
             "201 x1, 409 x9 | ReservedCount=1, ActiveReservations=1",
@@ -46,9 +46,9 @@ public class ConcurrencyTests(ApiFactory factory)
     public async Task Parallel_requests_with_enough_seats_all_succeed()
     {
         var eventId = await factory.SeedEventAsync(capacity: 100);
-        var userIds = await factory.SeedUsersAsync(ParallelRequests);
+        var clients = (await factory.SeedUsersAsync(ParallelRequests)).Select(factory.CreateClientFor);
 
-        var statusCodes = await SendInParallelAsync(userIds.Select(userId => (eventId, userId)));
+        var statusCodes = await ReserveInParallelAsync(eventId, clients);
 
         Assert.Equal(
             "201 x10 | ReservedCount=10, ActiveReservations=10",
@@ -59,14 +59,13 @@ public class ConcurrencyTests(ApiFactory factory)
     public async Task Parallel_cancellations_release_the_seat_once()
     {
         var eventId = await factory.SeedEventAsync(capacity: 1);
-        var userId = (await factory.SeedUsersAsync(1))[0];
-        var client = factory.CreateClient();
+        var client = factory.CreateClientFor(await factory.SeedUserAsync());
 
-        var created = await client.PostAsJsonAsync("/api/reservations", new { eventId, userId });
+        var created = await client.PostAsJsonAsync("/api/reservations", new { eventId });
         var reservation = await created.Content.ReadFromJsonAsync<IdResponse>();
 
         var responses = await Task.WhenAll(Enumerable.Range(0, ParallelRequests).Select(_ =>
-            client.PatchAsJsonAsync($"/api/reservations/{reservation!.Id}/cancel", new { userId })));
+            client.PatchAsync($"/api/reservations/{reservation!.Id}/cancel", null)));
 
         Assert.Equal(
             "200 x1, 422 x9 | ReservedCount=0, ActiveReservations=0",
@@ -75,12 +74,13 @@ public class ConcurrencyTests(ApiFactory factory)
 
     private record IdResponse(Guid Id);
 
-    private async Task<HttpStatusCode[]> SendInParallelAsync(IEnumerable<(Guid EventId, Guid UserId)> requests)
+    /// <param name="clients">One authenticated client per request, created before the race starts.</param>
+    private static async Task<HttpStatusCode[]> ReserveInParallelAsync(Guid eventId, IEnumerable<HttpClient> clients)
     {
-        var client = factory.CreateClient();
+        var ready = clients.ToList();
 
-        var responses = await Task.WhenAll(requests.Select(r =>
-            client.PostAsJsonAsync("/api/reservations", new { r.EventId, r.UserId })));
+        var responses = await Task.WhenAll(ready.Select(client =>
+            client.PostAsJsonAsync("/api/reservations", new { eventId })));
 
         return responses.Select(r => r.StatusCode).ToArray();
     }

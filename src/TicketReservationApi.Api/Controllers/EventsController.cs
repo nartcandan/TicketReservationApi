@@ -1,19 +1,25 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TicketReservationApi.Api.Auth;
 using TicketReservationApi.Application.Events;
 using TicketReservationApi.Application.Reservations;
 
 namespace TicketReservationApi.Api.Controllers;
 
-// TODO (step 5): restrict write endpoints to Admin
 [ApiController]
 [Route("api/events")]
+[Authorize(Roles = Roles.Admin)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
 public class EventsController(IEventService eventService) : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     public async Task<ActionResult<IReadOnlyList<EventResponse>>> GetAll(CancellationToken cancellationToken) =>
         Ok(await eventService.GetAllAsync(cancellationToken));
 
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     public async Task<ActionResult<EventResponse>> GetById(Guid id, CancellationToken cancellationToken) =>
         Ok(await eventService.GetByIdAsync(id, cancellationToken));
 
@@ -37,6 +43,7 @@ public class EventsController(IEventService eventService) : ControllerBase
     [HttpPatch("{id:guid}/cancel")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken cancellationToken)
     {

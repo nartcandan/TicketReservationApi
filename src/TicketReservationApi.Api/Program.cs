@@ -1,5 +1,7 @@
 using Scalar.AspNetCore;
+using TicketReservationApi.Api.Auth;
 using TicketReservationApi.Api.ErrorHandling;
+using TicketReservationApi.Api.OpenApi;
 using TicketReservationApi.Application;
 using TicketReservationApi.Infrastructure;
 using TicketReservationApi.Infrastructure.Persistence;
@@ -11,13 +13,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddJwtAuthentication();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 var app = builder.Build();
 
@@ -25,19 +28,26 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
+    await seeder.SeedAdminAsync();
+
+    if (app.Environment.IsDevelopment())
+    {
+        await seeder.SeedDevUsersAsync();
+    }
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference();
-
-    using var scope = app.Services.CreateScope();
-    await DevDataSeeder.SeedAsync(
-        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
-        scope.ServiceProvider.GetRequiredService<TimeProvider>());
+    app.MapScalarApiReference(options => options.AddPreferredSecuritySchemes(BearerSecuritySchemeTransformer.SchemeName));
 }
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
