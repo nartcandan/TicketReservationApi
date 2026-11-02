@@ -1,66 +1,68 @@
-# Bilet Rezervasyon API — Proje Planı
+# Ticket Reservation API — Project Plan
 
-Admin'in etkinlik oluşturduğu, kullanıcıların kontenjanlı etkinliklere rezervasyon yapıp iptal edebildiği bir REST API.
+A REST API where admins create events and users reserve and cancel seats for events with limited capacity.
 
-Bu proje; ASP.NET Core Web API, EF Core, kimlik doğrulama, iş kuralları ve **eşzamanlılık (concurrency)** yönetimi konularını uçtan uca uygulamak amacıyla geliştirilmektedir.
+The project is built to practise ASP.NET Core Web API, EF Core, authentication, business rules and **concurrency** handling end to end.
 
 ---
 
-## 1. Kapsam
+## 1. Scope
 
 ### MVP
-- Kayıt / giriş (JWT)
-- Roller: `Admin`, `User`
-- Etkinlik CRUD (Admin)
-- Rezervasyon oluşturma ve iptal (User)
-- Etkinlik listesinde filtreleme ve sayfalama
-- Eşzamanlı rezervasyon isteklerine karşı koruma
+- Registration / login (JWT)
+- Roles: `Admin`, `User`
+- Event CRUD (Admin)
+- Creating and cancelling reservations (User)
+- Filtering and pagination of the event list
+- Protection against concurrent reservation requests
 
-### Sonraya bırakılanlar
-- [ ] Koltuk numaralı rezervasyon
-- [ ] Bekleme listesi (kontenjan açılınca sıradakine bildirim)
-- [ ] E-posta bildirimi
-- [ ] Ödeme simülasyonu
-- [ ] Caching (etkinlik listesi)
+### Deferred
+- [ ] Reservations with seat numbers
+- [ ] Waiting list (notify the next person when a seat frees up)
+- [ ] Email notifications
+- [ ] Payment simulation
+- [ ] Caching (event list)
 - [ ] Rate limiting
-- [ ] Refresh token
-- [ ] Docker ile tam deploy + CI (GitHub Actions) — MSSQL ve Testcontainers dahil
+- [ ] Refresh tokens
+- [ ] Full Docker deployment + CI (GitHub Actions), including MSSQL and Testcontainers
 
-> **Model kararı:** MVP'de etkinlikler **kontenjan bazlıdır** (ör. 100 kişilik konser). Koltuk seçimi kapsamı büyüttüğü için sonraya bırakıldı.
+> **Model decision:** in the MVP, events are **capacity-based** (e.g. a concert for 100 people). Seat selection is deferred because it significantly expands the scope.
 
 ---
 
-## 2. Roller
+## 2. Roles
 
-| Rol | Yetkiler |
+| Role | Permissions |
 |---|---|
-| **Admin** | Etkinlik oluşturma, güncelleme, iptal etme; bir etkinliğin rezervasyon listesini görme |
-| **User** | Etkinlikleri listeleme; rezervasyon yapma; kendi rezervasyonlarını görme ve iptal etme |
+| **Admin** | Create, update and cancel events; view an event's reservations |
+| **User** | List events; make reservations; view and cancel their own reservations |
 
-- Register her zaman `User` rolünde hesap açar.
-- Admin hesabı uygulama başlangıcında **seed** ile oluşturulur (bilgiler konfigürasyondan).
+- Registration always creates a `User` account.
+- The admin account is **seeded** at application startup (credentials from configuration).
 
 ---
 
-## 3. İş Kuralları
+## 3. Business Rules
 
-| # | Kural | Hata |
+Rule IDs (K1–K9) are referenced in code comments and returned in the `rule` field of error responses.
+
+| # | Rule | Error |
 |---|---|---|
-| K1 | Kontenjan doluysa rezervasyon yapılamaz. | 409 |
-| K2 | Bir kullanıcı aynı etkinliğe birden fazla **aktif** rezervasyon yapamaz. | 409 |
-| K3 | Geçmiş veya iptal edilmiş etkinliğe rezervasyon yapılamaz. | 422 |
-| K4 | Etkinliğe 24 saatten az kaldıysa rezervasyon iptal edilemez. | 422 |
-| K5 | Rezervasyon iptal edildiğinde kontenjan geri açılır. | — |
-| K6 | Admin, kapasiteyi mevcut rezervasyon sayısının altına düşüremez. | 422 |
-| K7 | Kullanıcı yalnızca kendi rezervasyonlarını görebilir ve iptal edebilir. Başkasının rezervasyonu "yok" kabul edilir. | 404 |
-| K8 | Admin etkinliği iptal ettiğinde o etkinliğin tüm aktif rezervasyonları `Cancelled` olur. | — |
-| K9 | İptal edilmiş veya başlamış etkinlik güncellenemez; `StartsAt` geçmişe çekilemez. | 422 / 400 |
+| K1 | A reservation cannot be made when the event is full. | 409 |
+| K2 | A user cannot have more than one **active** reservation for the same event. | 409 |
+| K3 | Past or cancelled events cannot be reserved. | 422 |
+| K4 | A reservation cannot be cancelled less than 24 hours before the event starts. | 422 |
+| K5 | Cancelling a reservation frees up its seat. | — |
+| K6 | An admin cannot reduce capacity below the current number of reservations. | 422 |
+| K7 | Users can only view and cancel their own reservations. Someone else's reservation is treated as non-existent. | 404 |
+| K8 | When an admin cancels an event, all of its active reservations become `Cancelled`. | — |
+| K9 | Cancelled or already started events cannot be updated; `StartsAt` cannot be moved into the past. | 422 / 400 |
 
-Her kural için servis katmanında en az bir unit test yazılacaktır. Zamana bağlı kurallar (K3, K4, K9) `TimeProvider` üzerinden test edilir.
+Each rule gets at least one unit test at the service layer. Time-dependent rules (K3, K4, K9) are tested through `TimeProvider`.
 
 ---
 
-## 4. Veri Modeli
+## 4. Data Model
 
 ```
 User
@@ -92,88 +94,88 @@ Reservation
 - CancelledAt (nullable)
 ```
 
-**İlişkiler**
+**Relationships**
 - User 1 — N Reservation
 - Event 1 — N Reservation
 
-**Kısıtlar**
+**Constraints**
 - `User.Email` unique
-- `Reservation (EventId, UserId)` → **filtered unique index** (`WHERE [Status] = 'Active'`) — K2'nin veritabanı seviyesindeki garantisi
-- `Event.Capacity > 0`, `Event.ReservedCount >= 0`, `Event.ReservedCount <= Event.Capacity` (check constraint) — K1 ve K6'nın veritabanı seviyesindeki garantisi
+- `Reservation (EventId, UserId)` → **filtered unique index** (`WHERE [Status] = 'Active'`) — database-level guarantee for K2
+- `Event.Capacity > 0`, `Event.ReservedCount >= 0`, `Event.ReservedCount <= Event.Capacity` (check constraints) — database-level guarantee for K1 and K6
 
-**Notlar**
-- Enum'lar veritabanında **string** olarak saklanır (filtered index ve okunabilirlik için).
-- Tüm zamanlar **UTC** (`DateTimeOffset`) tutulur.
-- Rezervasyonlar silinmez, `Status = Cancelled` yapılır (soft cancel). Geçmiş kayıtlar korunur.
+**Notes**
+- Enums are stored as **strings** in the database (for the filtered index and readability).
+- All timestamps are stored in **UTC** (`DateTimeOffset`).
+- Reservations are never deleted; they are set to `Status = Cancelled` (soft cancel), so history is preserved.
 
 ---
 
-## 5. Endpoint'ler
+## 5. Endpoints
 
 ### Auth
-| Metot | Yol | Yetki | Açıklama |
+| Method | Path | Access | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | Anonim | Kullanıcı kaydı |
-| POST | `/api/auth/login` | Anonim | JWT döner |
+| POST | `/api/auth/register` | Anonymous | Register a user |
+| POST | `/api/auth/login` | Anonymous | Returns a JWT |
 
 ### Events
-| Metot | Yol | Yetki | Açıklama |
+| Method | Path | Access | Description |
 |---|---|---|---|
-| GET | `/api/events` | Anonim | Liste (filtre + sayfalama) |
-| GET | `/api/events/{id}` | Anonim | Detay |
-| POST | `/api/events` | Admin | Oluştur |
-| PUT | `/api/events/{id}` | Admin | Güncelle (K6, K9) |
-| PATCH | `/api/events/{id}/cancel` | Admin | İptal et (K8) |
-| GET | `/api/events/{id}/reservations` | Admin | Etkinliğin rezervasyonları |
+| GET | `/api/events` | Anonymous | List (filtering + pagination) |
+| GET | `/api/events/{id}` | Anonymous | Details |
+| POST | `/api/events` | Admin | Create |
+| PUT | `/api/events/{id}` | Admin | Update (K6, K9) |
+| PATCH | `/api/events/{id}/cancel` | Admin | Cancel (K8) |
+| GET | `/api/events/{id}/reservations` | Admin | The event's reservations |
 
-Liste sorgu parametreleri: `from`, `to`, `search`, `onlyAvailable`, `page` (varsayılan 1), `pageSize` (varsayılan 20, en fazla 100)
+List query parameters: `from`, `to`, `search`, `onlyAvailable`, `page` (default 1), `pageSize` (default 20, max 100)
 
-Sayfalı yanıt formatı:
+Paged response format:
 ```json
 { "items": [], "page": 1, "pageSize": 20, "totalCount": 0 }
 ```
 
 ### Reservations
-| Metot | Yol | Yetki | Açıklama |
+| Method | Path | Access | Description |
 |---|---|---|---|
-| POST | `/api/reservations` | User | Rezervasyon yap (K1, K2, K3) |
-| GET | `/api/reservations/me` | User | Kendi rezervasyonlarım |
-| PATCH | `/api/reservations/{id}/cancel` | User | İptal et (K4, K5, K7) |
+| POST | `/api/reservations` | User | Make a reservation (K1, K2, K3) |
+| GET | `/api/reservations/me` | User | My reservations |
+| PATCH | `/api/reservations/{id}/cancel` | User | Cancel (K4, K5, K7) |
 
-### Status code sözleşmesi
-| Kod | Anlam |
+### Status code contract
+| Code | Meaning |
 |---|---|
-| 200 / 201 / 204 | Başarılı |
-| 400 | Validasyon hatası |
-| 401 | Kimlik doğrulanmadı |
-| 403 | Yetki yok (rol uygun değil) |
-| 404 | Kaynak bulunamadı (başkasına ait kaynaklar dahil) |
-| 409 | Çakışma (kontenjan dolu, zaten rezervasyon var, concurrency hatası, unique index ihlali) |
-| 422 | İş kuralı ihlali |
+| 200 / 201 / 204 | Success |
+| 400 | Validation error |
+| 401 | Not authenticated |
+| 403 | Not authorized (wrong role) |
+| 404 | Resource not found (including resources owned by someone else) |
+| 409 | Conflict (event full, reservation already exists, concurrency conflict, unique index violation) |
+| 422 | Business rule violation |
 
-Tüm hata yanıtları **ProblemDetails** formatında döner.
+All error responses use the **ProblemDetails** format.
 
 ---
 
-## 6. Teknoloji ve Mimari
+## 6. Technology and Architecture
 
-- **.NET 10**, Controller-based Web API
-- **EF Core** + **MSSQL** (şimdilik yerel SQL Server 2022 Developer; Docker sonraya)
+- **.NET 10**, controller-based Web API
+- **EF Core** + **MSSQL** (local SQL Server 2022 Developer for now; Docker later)
 - **FluentValidation**
-- **JWT** authentication, role-based authorization; şifreler `PasswordHasher<User>` ile hash'lenir
+- **JWT** authentication, role-based authorization; passwords hashed with `PasswordHasher<User>`
 - Global exception handling (`IExceptionHandler` + ProblemDetails)
   - `DbUpdateConcurrencyException` → 409
-  - Unique index ihlali (`SqlException` 2601 / 2627) → 409
-- **xUnit** + **NSubstitute**; integration testler `WebApplicationFactory` + yerel SQL Server'da test veritabanı
-- OpenAPI + **Scalar** UI (JWT desteğiyle)
+  - Unique index violation (`SqlException` 2601 / 2627) → 409
+- **xUnit** + **NSubstitute**; integration tests with `WebApplicationFactory` and a test database on local SQL Server
+- OpenAPI + **Scalar** UI (with JWT support)
 
-**Katmanlar**
+**Layers**
 ```
 src/
-  TicketReservationApi.Api             → Controllers, middleware, DI kurulumu
-  TicketReservationApi.Application     → Servisler, DTO'lar, validator'lar, iş kuralları
-  TicketReservationApi.Infrastructure  → DbContext, entity konfigürasyonları, migration'lar
-  TicketReservationApi.Domain          → Entity'ler, enum'lar
+  TicketReservationApi.Api             → Controllers, middleware, DI setup
+  TicketReservationApi.Application     → Services, DTOs, validators, business rules
+  TicketReservationApi.Infrastructure  → DbContext, entity configurations, migrations
+  TicketReservationApi.Domain          → Entities, enums
 tests/
   TicketReservationApi.UnitTests
   TicketReservationApi.IntegrationTests
@@ -181,55 +183,56 @@ tests/
 
 ---
 
-## 7. Eşzamanlılık (Concurrency) Deneyi
+## 7. Concurrency Experiment
 
-**Senaryo:** Kontenjanı 1 olan etkinliğe aynı anda 10 rezervasyon isteği.
-**Beklenen:** 1 × `201 Created`, 9 × `409 Conflict`; veritabanında `ReservedCount = 1` ve 1 aktif rezervasyon.
+**Scenario:** 10 simultaneous reservation requests for an event with a capacity of 1.
+**Expected:** 1 × `201 Created`, 9 × `409 Conflict`; in the database `ReservedCount = 1` and exactly 1 active reservation.
 
-**Adımlar**
-1. Korumasız servis kodu yaz; kontrol ile kayıt arasına geçici `Task.Delay` ekle.
-2. `Task.WhenAll` ile 10 paralel istek gönderen integration test yaz (gerçek MSSQL — InMemory provider kullanma).
-3. Problemi gözlemle: **overbooking** ve **lost update**.
-4. Çözümleri uygula:
-   - `Event.RowVersion` ile optimistic concurrency → `DbUpdateConcurrencyException` → 409
-   - Alternatif: `ExecuteUpdateAsync` ile atomik `WHERE ReservedCount < Capacity` güncellemesi + transaction
-   - `Reservation` filtered unique index ile K2 garantisi
-   - `ReservedCount <= Capacity` check constraint'i son savunma hattı olarak
-5. Aynı testi tekrar çalıştır, beklenen sonucu doğrula.
-6. **Ek senaryo:** Kontenjanı 100 olan etkinliğe 10 eşzamanlı istek. Optimistic concurrency'de yer olmasına rağmen istekler 409 alır (false conflict); atomik güncellemede hepsi başarılı olur. İki yaklaşımı karşılaştır.
-7. `Task.Delay`'i kaldır.
-8. Sonuçları README'de "Concurrency" bölümünde belgele.
-
----
-
-## 8. Geliştirme Sırası
-
-- [x] **1. Kurulum** — Solution ve katmanlar, yerel MSSQL, DbContext, `Event` entity'si, ilk migration
-- [x] **2. Event CRUD** — DTO'lar, FluentValidation, global hata yönetimi, OpenAPI + Scalar
-- [x] **3. Rezervasyon** — `User` (seed'li test kullanıcıları) ve `Reservation` entity'leri, ilişkiler; oluşturma ve iptal (auth yok, `UserId` body'den)
-- [x] **4. Concurrency deneyi** — Bölüm 7; integration test projesi burada kurulur
-- [x] **5. Auth** — Register / login, JWT, roller, admin seed; `UserId` artık token'dan
-- [ ] **6. İş kuralları ve sorgular** — Kalan kurallar (K3–K9), filtreleme, sayfalama
-- [ ] **7. Test ve dokümantasyon** — Unit testler (K1–K9), kalan integration testler, README
+**Steps**
+1. Write unprotected service code; add a temporary `Task.Delay` between the check and the save.
+2. Write an integration test that sends 10 parallel requests with `Task.WhenAll` (real MSSQL — do not use the InMemory provider).
+3. Observe the problem: **overbooking** and **lost updates**.
+4. Apply the fixes:
+   - Optimistic concurrency with `Event.RowVersion` → `DbUpdateConcurrencyException` → 409
+   - Alternative: atomic `WHERE ReservedCount < Capacity` update with `ExecuteUpdateAsync` + transaction
+   - Guarantee K2 with a filtered unique index on `Reservation`
+   - `ReservedCount <= Capacity` check constraint as the last line of defence
+5. Run the same test again and verify the expected result.
+6. **Additional scenario:** 10 simultaneous requests for an event with a capacity of 100. With optimistic concurrency, requests get 409 even though seats are available (false conflicts); with the atomic update, all succeed. Compare the two approaches.
+7. Remove the `Task.Delay`.
+8. Document the results in the "Concurrency" section of the README.
 
 ---
 
-## 9. Kararlar Günlüğü
+## 8. Development Order
 
-| Tarih | Karar | Gerekçe |
+- [x] **1. Setup** — Solution and layers, local MSSQL, DbContext, `Event` entity, first migration
+- [x] **2. Event CRUD** — DTOs, FluentValidation, global error handling, OpenAPI + Scalar
+- [x] **3. Reservations** — `User` (with seeded test users) and `Reservation` entities, relationships; create and cancel (no auth, `UserId` from the request body)
+- [x] **4. Concurrency experiment** — Section 7; the integration test project is set up here
+- [x] **5. Auth** — Register / login, JWT, roles, admin seed; `UserId` now comes from the token
+- [ ] **6. Business rules and queries** — Remaining rules (K3–K9), filtering, pagination
+- [ ] **7. Tests and documentation** — Unit tests (K1–K9), remaining integration tests, README
+
+---
+
+## 9. Decision Log
+
+| Date | Decision | Rationale |
 |---|---|---|
-| 2026-11-02 | Kontenjan bazlı model | MVP'yi küçük tutmak; koltuk seçimi sonraya |
-| 2026-11-02 | Rezervasyonlar silinmez, iptal edilir | Geçmişin korunması |
-| 2026-11-02 | Concurrency deneyi auth'tan önce | Testte farklı kullanıcı token'ları gerektirmemesi |
-| 2026-11-02 | Docker yerine yerel SQL Server 2022 | Docker şimdilik kullanılmıyor; gerçek MSSQL davranışı korunuyor |
-| 2026-11-02 | `User` entity'si 3. adımda (seed'li) | `Reservation.UserId` FK'si için tablo auth'tan önce gerekli |
-| 2026-11-02 | K7 ihlali 404 döner | Başkasının kaynağının varlığını sızdırmamak |
-| 2026-11-02 | Etkinlik iptali aktif rezervasyonları iptal eder (K8) | Tutarsız "aktif" rezervasyon kalmaması |
-| 2026-11-02 | Enum'lar string saklanır | Filtered index `WHERE [Status] = 'Active'` ve okunabilirlik |
-| 2026-11-02 | `ReservedCount <= Capacity` check constraint | K1 / K6 için veritabanı garantisi |
-| 2026-11-02 | `TimeProvider` ile zaman soyutlaması | Zamana bağlı kuralların deterministik testi |
-| 2026-11-02 | Admin seed ile oluşturulur, register yalnızca `User` | Yetki yükseltmeyi engellemek |
-| 2026-11-02 | NSubstitute, Scalar, `PasswordHasher<User>` | Sade bağımlılıklar; tam Identity gereksiz |
-| 2026-11-02 | Rezervasyonda atomik `UPDATE … WHERE ReservedCount < Capacity` + filtered unique index | Optimistic concurrency doğru ama boş yer varken de false conflict üretiyor (deney sonucu, README) |
-| 2026-11-02 | Rezervasyon iptali de koşullu `UPDATE … WHERE Status = 'Active'` | Eşzamanlı iptallerde koltuğun iki kez serbest bırakılmaması |
-| 2026-11-02 | `RowVersion` admin işlemleri için korunur | Eski veriyle yapılan admin güncellemesi `ReservedCount`'u ezmesin |
+| 2026-11-02 | Capacity-based model | Keep the MVP small; seat selection later |
+| 2026-11-02 | Reservations are cancelled, never deleted | Preserve history |
+| 2026-11-02 | Concurrency experiment before auth | Tests don't need tokens for different users |
+| 2026-11-02 | Local SQL Server 2022 instead of Docker | Docker not used for now; real MSSQL behaviour is kept |
+| 2026-11-02 | `User` entity in step 3 (seeded) | The `Reservation.UserId` foreign key needs the table before auth exists |
+| 2026-11-02 | K7 violations return 404 | Don't reveal that someone else's resource exists |
+| 2026-11-02 | Cancelling an event cancels its active reservations (K8) | No inconsistent "active" reservations left behind |
+| 2026-11-02 | Enums stored as strings | Filtered index `WHERE [Status] = 'Active'` and readability |
+| 2026-11-02 | `ReservedCount <= Capacity` check constraint | Database-level guarantee for K1 / K6 |
+| 2026-11-02 | Time abstracted with `TimeProvider` | Deterministic tests for time-dependent rules |
+| 2026-11-02 | Admin is seeded; registration creates only `User` | Prevent privilege escalation |
+| 2026-11-02 | NSubstitute, Scalar, `PasswordHasher<User>` | Minimal dependencies; full Identity is unnecessary |
+| 2026-11-02 | Reservations use an atomic `UPDATE … WHERE ReservedCount < Capacity` + filtered unique index | Optimistic concurrency is correct but produces false conflicts even when seats are free (experiment result, see README) |
+| 2026-11-02 | Reservation cancellation also uses a conditional `UPDATE … WHERE Status = 'Active'` | A seat is never released twice by concurrent cancellations |
+| 2026-11-02 | `RowVersion` kept for admin operations | A stale admin update must not overwrite `ReservedCount` |
+| 2026-11-02 | PLAN.md translated to English | Consistent with the README and code for the public repository |
