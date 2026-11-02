@@ -1,19 +1,17 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TicketReservationApi.Application.Common.Exceptions;
+using TicketReservationApi.Application.Common.Interfaces;
 
 namespace TicketReservationApi.Api.ErrorHandling;
 
 public sealed class GlobalExceptionHandler(
     IProblemDetailsService problemDetailsService,
+    IDatabaseErrors databaseErrors,
     ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
-    // SQL Server: duplicate key in unique index / unique constraint
-    private static readonly int[] UniqueViolationErrorNumbers = [2601, 2627];
-
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,
@@ -35,7 +33,8 @@ public sealed class GlobalExceptionHandler(
             BusinessRuleException e => Problem(StatusCodes.Status422UnprocessableEntity, "Business rule violation.", e.Message, e.Rule),
             DbUpdateConcurrencyException => Problem(StatusCodes.Status409Conflict, "Conflict.",
                 "The resource was modified by another request. Please retry."),
-            DbUpdateException { InnerException: SqlException sql } when UniqueViolationErrorNumbers.Contains(sql.Number) =>
+            // Fallback: services translate the unique violations they expect into rule-specific conflicts
+            DbUpdateException e when databaseErrors.IsUniqueViolation(e) =>
                 Problem(StatusCodes.Status409Conflict, "Conflict.", "A conflicting record already exists."),
             _ => null
         };

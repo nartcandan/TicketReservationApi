@@ -18,20 +18,23 @@ public class AuthService(
     IAppDbContext db,
     IPasswordHasher<User> passwordHasher,
     IAccessTokenGenerator tokenGenerator,
+    IDatabaseErrors databaseErrors,
     TimeProvider timeProvider,
     IValidator<RegisterRequest> registerValidator,
     IValidator<LoginRequest> loginValidator) : IAuthService
 {
+    private static ConflictException EmailTaken() => new("EmailTaken", "Email is already registered.");
+
     public async Task<UserResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         await registerValidator.ValidateAndThrowAsync(request, cancellationToken);
 
         var email = NormalizeEmail(request.Email);
 
-        // Fast path; a concurrent duplicate still hits the unique index (-> 409)
+        // Early check for a clear error; a concurrent duplicate is caught by the unique index below
         if (await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
         {
-            throw new ConflictException("EmailTaken", "Email is already registered.");
+            throw EmailTaken();
         }
 
         var user = new User
@@ -47,7 +50,16 @@ public class AuthService(
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         db.Users.Add(user);
-        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (databaseErrors.IsUniqueViolation(ex))
+        {
+            // The only unique key on a new user besides the generated Id is Email
+            throw EmailTaken();
+        }
 
         return new UserResponse(user.Id, user.Email, user.FullName, user.Role.ToString());
     }

@@ -211,7 +211,8 @@ WHERE Id = @id AND Status = 'Active' AND ReservedCount < Capacity
   so no false conflicts.
 - The reservation row is inserted in the same transaction. A filtered unique index on
   `(EventId, UserId) WHERE Status = 'Active'` guarantees K2. A concurrent duplicate fails on insert
-  (SQL error 2601), the transaction rolls back and the API returns **409**.
+  (SQL error 2601), the transaction rolls back and the service turns the error into the same
+  **409 `K2`** response as the early check, so clients see one answer regardless of timing.
 - Cancellation uses the same idea: `UPDATE Reservations SET Status = 'Cancelled' WHERE Id = @id AND Status = 'Active'`.
   Only one of several concurrent cancels affects a row, so the seat is released exactly once.
 

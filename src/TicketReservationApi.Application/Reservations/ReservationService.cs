@@ -19,8 +19,12 @@ public interface IReservationService
 public class ReservationService(
     IAppDbContext db,
     TimeProvider timeProvider,
+    IDatabaseErrors databaseErrors,
     IValidator<CreateReservationRequest> createValidator) : IReservationService
 {
+    private static ConflictException AlreadyReserved() =>
+        new("K2", "User already has an active reservation for this event.");
+
     // The early checks give descriptive errors. Under concurrency the real guarantees are
     // the atomic conditional UPDATE (K1) and the filtered unique index (K2). See PLAN.md, section 7.
     public async Task<ReservationResponse> CreateAsync(Guid userId, CreateReservationRequest request, CancellationToken cancellationToken)
@@ -39,7 +43,7 @@ public class ReservationService(
 
         if (alreadyReserved)
         {
-            throw new ConflictException("K2", "User already has an active reservation for this event.");
+            throw AlreadyReserved();
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -65,8 +69,17 @@ public class ReservationService(
 
         db.Reservations.Add(reservation);
 
-        // K2: a concurrent duplicate violates the filtered unique index here (-> 409) and the transaction rolls back
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (databaseErrors.IsUniqueViolation(ex))
+        {
+            // K2: a concurrent duplicate passed the early check but hit the filtered unique index.
+            // The only unique key on this insert is (EventId, UserId); the transaction rolls back on dispose.
+            throw AlreadyReserved();
+        }
+
         await transaction.CommitAsync(cancellationToken);
 
         return ReservationResponse.From(reservation);
