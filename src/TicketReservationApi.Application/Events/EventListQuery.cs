@@ -7,7 +7,7 @@ public record EventListQuery
 {
     public const int MaxPageSize = 100;
 
-    /// <summary>Only events starting at or after this time.</summary>
+    /// <summary>Only events starting at or after this time. Defaults to now, so past events are hidden unless asked for.</summary>
     public DateTimeOffset? From { get; init; }
 
     /// <summary>Only events starting at or before this time.</summary>

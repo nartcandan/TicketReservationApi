@@ -74,18 +74,42 @@ public class EventListTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Only_available_excludes_full_cancelled_and_past_events()
+    public async Task Past_events_are_hidden_unless_from_is_given()
+    {
+        await factory.SeedEventAsync(capacity: 10, startsAt: DateTimeOffset.UtcNow.AddDays(-2), title: $"{_tag} past");
+        await factory.SeedEventAsync(capacity: 10, startsAt: DateTimeOffset.UtcNow.AddDays(2), title: $"{_tag} upcoming");
+
+        var byDefault = await ListAsync("");
+        var withFrom = await ListAsync($"from={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-7).ToString("O"))}");
+
+        Assert.Equal([$"{_tag} upcoming"], byDefault.Items.Select(e => e.Title));
+        Assert.Equal([$"{_tag} past", $"{_tag} upcoming"], withFrom.Items.Select(e => e.Title));
+    }
+
+    [Fact]
+    public async Task Only_available_excludes_full_and_cancelled_events()
     {
         await factory.SeedEventAsync(capacity: 10, title: $"{_tag} available");
         await factory.SeedEventAsync(capacity: 2, reservedCount: 2, title: $"{_tag} full");
         await factory.SeedEventAsync(capacity: 10, status: EventStatus.Cancelled, title: $"{_tag} cancelled");
-        await factory.SeedEventAsync(capacity: 10, startsAt: DateTimeOffset.UtcNow.AddDays(-1), title: $"{_tag} past");
 
         var all = await ListAsync("");
         var available = await ListAsync("onlyAvailable=true");
 
-        Assert.Equal(4, all.TotalCount);
+        // Full and cancelled upcoming events are still listed by default, with their status and seats
+        Assert.Equal(3, all.TotalCount);
         Assert.Equal([$"{_tag} available"], available.Items.Select(e => e.Title));
+    }
+
+    [Fact]
+    public async Task Only_available_excludes_past_events_even_when_from_is_in_the_past()
+    {
+        await factory.SeedEventAsync(capacity: 10, startsAt: DateTimeOffset.UtcNow.AddDays(-1), title: $"{_tag} past");
+
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-7).ToString("O"));
+        var available = await ListAsync($"from={from}&onlyAvailable=true");
+
+        Assert.Empty(available.Items);
     }
 
     [Fact]

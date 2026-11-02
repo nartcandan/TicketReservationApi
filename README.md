@@ -52,12 +52,13 @@ dotnet test
 
 | Parameter | Description |
 |---|---|
-| `from`, `to` | Events starting within this range (inclusive), e.g. `2026-12-01T00:00:00Z` |
+| `from`, `to` | Events starting within this range (inclusive), e.g. `2026-12-01T00:00:00Z`. `from` defaults to now |
 | `search` | Case-insensitive match on title or venue |
 | `onlyAvailable` | `true` → only events that can be reserved now: active, not started, not full |
 | `page`, `pageSize` | Default `1` and `20`; `pageSize` is at most `100` |
 
-Without filters, past and cancelled events are included (each item has a `status` field).
+Without filters, the list shows upcoming events, including cancelled and fully booked ones (each item has
+`status` and `availableSeats`). Past events appear only when `from` is set to an earlier time.
 Results are ordered by start time. Invalid values return `400`.
 
 ```json

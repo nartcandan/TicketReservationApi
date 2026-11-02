@@ -28,12 +28,12 @@ public class EventService(
     {
         await listValidator.ValidateAndThrowAsync(query, cancellationToken);
 
-        var events = db.Events.AsNoTracking();
+        var now = timeProvider.GetUtcNow();
+        var from = query.From ?? now;
 
-        if (query.From is { } from)
-        {
-            events = events.Where(e => e.StartsAt >= from);
-        }
+        var events = db.Events
+            .AsNoTracking()
+            .Where(e => e.StartsAt >= from);
 
         if (query.To is { } to)
         {
@@ -49,7 +49,6 @@ public class EventService(
 
         if (query.OnlyAvailable)
         {
-            var now = timeProvider.GetUtcNow();
             events = events.Where(e =>
                 e.Status == EventStatus.Active && e.StartsAt > now && e.ReservedCount < e.Capacity);
         }

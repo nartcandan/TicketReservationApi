@@ -236,5 +236,6 @@ tests/
 | 2026-11-02 | Reservation cancellation also uses a conditional `UPDATE … WHERE Status = 'Active'` | A seat is never released twice by concurrent cancellations |
 | 2026-11-02 | `RowVersion` kept for admin operations | A stale admin update must not overwrite `ReservedCount` |
 | 2026-11-02 | PLAN.md translated to English | Consistent with the README and code for the public repository |
-| 2026-11-02 | Event list returns past and cancelled events unless `onlyAvailable=true` | One endpoint serves both browsing and booking; each item carries its `status` |
+| 2026-11-02 | ~~Event list returns past and cancelled events unless `onlyAvailable=true`~~ (superseded below) | One endpoint serves both browsing and booking; each item carries its `status` |
 | 2026-11-02 | `from` / `to` are inclusive; out-of-range `page` / `pageSize` return 400 instead of being clamped | Predictable behaviour; clients learn about mistakes instead of getting silently different results |
+| 2026-11-02 | `from` defaults to now: the event list shows upcoming events (cancelled and full ones included) | Ordered by start time, past events would otherwise fill the first pages; past events remain available via an explicit `from` |
