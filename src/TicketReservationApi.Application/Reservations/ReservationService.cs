@@ -63,6 +63,9 @@ public class ReservationService(
             throw new ConflictException("K1", "Event is fully booked.");
         }
 
+        // EXPERIMENT (PLAN.md, step 4): widens the race window between check and save
+        await Task.Delay(200, cancellationToken);
+
         var reservation = new Reservation
         {
             Id = Guid.CreateVersion7(),

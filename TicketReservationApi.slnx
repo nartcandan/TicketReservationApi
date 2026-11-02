@@ -5,4 +5,7 @@
     <Project Path="src/TicketReservationApi.Domain/TicketReservationApi.Domain.csproj" />
     <Project Path="src/TicketReservationApi.Infrastructure/TicketReservationApi.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TicketReservationApi.IntegrationTests/TicketReservationApi.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
