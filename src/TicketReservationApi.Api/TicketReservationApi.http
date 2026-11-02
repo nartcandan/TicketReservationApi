@@ -41,6 +41,10 @@ Content-Type: application/json
 GET {{TicketReservationApi_HostAddress}}/api/events
 Accept: application/json
 
+### List events with filters (public)
+GET {{TicketReservationApi_HostAddress}}/api/events?search=konser&from=2026-12-01T00:00:00Z&to=2026-12-31T23:59:59Z&onlyAvailable=true&page=1&pageSize=10
+Accept: application/json
+
 ### Get event (public)
 GET {{TicketReservationApi_HostAddress}}/api/events/{{eventId}}
 Accept: application/json

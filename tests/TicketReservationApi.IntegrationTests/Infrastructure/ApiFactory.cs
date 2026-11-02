@@ -48,17 +48,25 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         return client;
     }
 
-    public async Task<Guid> SeedEventAsync(int capacity, DateTimeOffset? startsAt = null)
+    public async Task<Guid> SeedEventAsync(
+        int capacity,
+        DateTimeOffset? startsAt = null,
+        string title = "Test event",
+        string venue = "Test venue",
+        int reservedCount = 0,
+        EventStatus status = EventStatus.Active)
     {
         await using var db = CreateDbContext();
 
         var ev = new Event
         {
             Id = Guid.CreateVersion7(),
-            Title = "Test event",
-            Venue = "Test venue",
+            Title = title,
+            Venue = venue,
             StartsAt = startsAt ?? DateTimeOffset.UtcNow.AddDays(30),
             Capacity = capacity,
+            ReservedCount = reservedCount,
+            Status = status,
             CreatedAt = DateTimeOffset.UtcNow
         };
 

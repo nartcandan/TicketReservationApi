@@ -46,6 +46,29 @@ Integration tests create and use a separate `TicketReservation_Tests` database:
 dotnet test
 ```
 
+### Listing events
+
+`GET /api/events` is public and paged. All parameters are optional:
+
+| Parameter | Description |
+|---|---|
+| `from`, `to` | Events starting within this range (inclusive), e.g. `2026-12-01T00:00:00Z` |
+| `search` | Case-insensitive match on title or venue |
+| `onlyAvailable` | `true` → only events that can be reserved now: active, not started, not full |
+| `page`, `pageSize` | Default `1` and `20`; `pageSize` is at most `100` |
+
+Without filters, past and cancelled events are included (each item has a `status` field).
+Results are ordered by start time. Invalid values return `400`.
+
+```json
+{
+  "items": [ { "id": "…", "title": "…", "startsAt": "…", "availableSeats": 12, "status": "Active", "…": "…" } ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 42
+}
+```
+
 ## Concurrency
 
 **Scenario:** many users try to reserve the same event at the same moment. Every request first checks

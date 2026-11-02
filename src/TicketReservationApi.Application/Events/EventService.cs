@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using TicketReservationApi.Application.Common;
 using TicketReservationApi.Application.Common.Exceptions;
 using TicketReservationApi.Application.Common.Interfaces;
 using TicketReservationApi.Domain.Entities;
@@ -9,7 +10,7 @@ namespace TicketReservationApi.Application.Events;
 
 public interface IEventService
 {
-    Task<IReadOnlyList<EventResponse>> GetAllAsync(CancellationToken cancellationToken);
+    Task<PagedResponse<EventResponse>> ListAsync(EventListQuery query, CancellationToken cancellationToken);
     Task<EventResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<EventResponse> CreateAsync(CreateEventRequest request, CancellationToken cancellationToken);
     Task<EventResponse> UpdateAsync(Guid id, UpdateEventRequest request, CancellationToken cancellationToken);
@@ -20,16 +21,53 @@ public class EventService(
     IAppDbContext db,
     TimeProvider timeProvider,
     IValidator<CreateEventRequest> createValidator,
-    IValidator<UpdateEventRequest> updateValidator) : IEventService
+    IValidator<UpdateEventRequest> updateValidator,
+    IValidator<EventListQuery> listValidator) : IEventService
 {
-    public async Task<IReadOnlyList<EventResponse>> GetAllAsync(CancellationToken cancellationToken)
+    public async Task<PagedResponse<EventResponse>> ListAsync(EventListQuery query, CancellationToken cancellationToken)
     {
-        var events = await db.Events
-            .AsNoTracking()
+        await listValidator.ValidateAndThrowAsync(query, cancellationToken);
+
+        var events = db.Events.AsNoTracking();
+
+        if (query.From is { } from)
+        {
+            events = events.Where(e => e.StartsAt >= from);
+        }
+
+        if (query.To is { } to)
+        {
+            events = events.Where(e => e.StartsAt <= to);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            // Translated to LIKE; case-insensitive under the database's default collation
+            var search = query.Search.Trim();
+            events = events.Where(e => e.Title.Contains(search) || e.Venue.Contains(search));
+        }
+
+        if (query.OnlyAvailable)
+        {
+            var now = timeProvider.GetUtcNow();
+            events = events.Where(e =>
+                e.Status == EventStatus.Active && e.StartsAt > now && e.ReservedCount < e.Capacity);
+        }
+
+        var totalCount = await events.CountAsync(cancellationToken);
+
+        var page = await events
             .OrderBy(e => e.StartsAt)
+            .ThenBy(e => e.Id) // stable order across pages when StartsAt ties
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync(cancellationToken);
 
-        return events.Select(EventResponse.From).ToList();
+        return new PagedResponse<EventResponse>(
+            page.Select(EventResponse.From).ToList(),
+            query.Page,
+            query.PageSize,
+            totalCount);
     }
 
     public async Task<EventResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken)

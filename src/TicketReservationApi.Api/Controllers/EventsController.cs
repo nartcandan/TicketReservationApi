@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TicketReservationApi.Api.Auth;
+using TicketReservationApi.Application.Common;
 using TicketReservationApi.Application.Events;
 using TicketReservationApi.Application.Reservations;
 
@@ -15,8 +16,11 @@ public class EventsController(IEventService eventService) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<IReadOnlyList<EventResponse>>> GetAll(CancellationToken cancellationToken) =>
-        Ok(await eventService.GetAllAsync(cancellationToken));
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PagedResponse<EventResponse>>> List(
+        [FromQuery] EventListQuery query,
+        CancellationToken cancellationToken) =>
+        Ok(await eventService.ListAsync(query, cancellationToken));
 
     [HttpGet("{id:guid}")]
     [AllowAnonymous]

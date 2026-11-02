@@ -211,7 +211,7 @@ tests/
 - [x] **3. Reservations** — `User` (with seeded test users) and `Reservation` entities, relationships; create and cancel (no auth, `UserId` from the request body)
 - [x] **4. Concurrency experiment** — Section 7; the integration test project is set up here
 - [x] **5. Auth** — Register / login, JWT, roles, admin seed; `UserId` now comes from the token
-- [ ] **6. Business rules and queries** — Remaining rules (K3–K9), filtering, pagination
+- [x] **6. Business rules and queries** — Remaining rules (K3–K9, implemented alongside steps 2–3), filtering, pagination
 - [ ] **7. Tests and documentation** — Unit tests (K1–K9), remaining integration tests, README
 
 ---
@@ -236,3 +236,5 @@ tests/
 | 2026-11-02 | Reservation cancellation also uses a conditional `UPDATE … WHERE Status = 'Active'` | A seat is never released twice by concurrent cancellations |
 | 2026-11-02 | `RowVersion` kept for admin operations | A stale admin update must not overwrite `ReservedCount` |
 | 2026-11-02 | PLAN.md translated to English | Consistent with the README and code for the public repository |
+| 2026-11-02 | Event list returns past and cancelled events unless `onlyAvailable=true` | One endpoint serves both browsing and booking; each item carries its `status` |
+| 2026-11-02 | `from` / `to` are inclusive; out-of-range `page` / `pageSize` return 400 instead of being clamped | Predictable behaviour; clients learn about mistakes instead of getting silently different results |
