@@ -2,9 +2,53 @@
 
 A REST API where admins create events with a fixed capacity and users reserve and cancel seats.
 Built with ASP.NET Core (.NET 10), EF Core and SQL Server to practise authentication,
-business rules and, above all, **concurrency handling**.
+business rules and, above all, **concurrency handling**: no overbooking, even when many users try to
+reserve the last seat at the same moment ([see the experiment](#concurrency)).
 
-See [PLAN.md](PLAN.md) for scope, business rules (K1–K9), endpoints and the decision log.
+[PLAN.md](PLAN.md) contains the full scope, data model, business rules and a decision log explaining
+why things are built the way they are.
+
+## Contents
+
+- [Features](#features)
+- [Tech stack and architecture](#tech-stack-and-architecture)
+- [Running locally](#running-locally)
+- [API](#api)
+- [Business rules](#business-rules)
+- [Concurrency](#concurrency)
+- [Tests](#tests)
+- [Not in scope (yet)](#not-in-scope-yet)
+
+## Features
+
+- JWT authentication with `Admin` and `User` roles
+- Event management for admins: create, update, cancel (cancelling also cancels its reservations)
+- Reservations for users: reserve, list own reservations, cancel up to 24 hours before the event
+- Public event list with date range, text search, availability filter and pagination
+- Business rules enforced in code **and** in the database (check constraints, filtered unique index)
+- Safe under concurrent requests: atomic conditional updates instead of check-then-act
+- Consistent errors in [ProblemDetails](https://www.rfc-editor.org/rfc/rfc9457) format with the violated rule id
+- OpenAPI document and Scalar UI with JWT support
+
+## Tech stack and architecture
+
+.NET 10 · ASP.NET Core (controllers) · EF Core 10 · SQL Server · FluentValidation · JWT bearer ·
+OpenAPI + Scalar · xUnit · `WebApplicationFactory` · `FakeTimeProvider`
+
+```
+src/
+  TicketReservationApi.Api             Controllers, auth setup, global exception handler, OpenAPI
+  TicketReservationApi.Application     Services, DTOs, validators, business rules
+  TicketReservationApi.Infrastructure  DbContext, entity configurations, migrations, JWT issuing, seeding
+  TicketReservationApi.Domain          Entities and enums
+tests/
+  TicketReservationApi.UnitTests         Business rules and validators, no database
+  TicketReservationApi.IntegrationTests  Full HTTP pipeline against a real SQL Server database
+```
+
+Dependencies point inwards: `Api → Application → Domain`, and `Infrastructure` implements the interfaces
+defined in `Application` (`IAppDbContext`, `IAccessTokenGenerator`). Time is read through `TimeProvider`
+everywhere, so time-dependent rules are testable.
 
 ## Running locally
 
@@ -30,21 +74,28 @@ dotnet run --project src/TicketReservationApi.Api
 
 API reference (Scalar): http://localhost:5133/scalar/v1
 
-### Authentication
+In Development, three test users are seeded: `ali@test.local`, `ayse@test.local`, `can@test.local`, all with
+the password `Passw0rd!`. [`TicketReservationApi.http`](src/TicketReservationApi.Api/TicketReservationApi.http)
+contains ready-made requests that log in and reuse the tokens (Visual Studio / VS Code REST Client).
 
-- `POST /api/auth/register` always creates a `User`. The `Admin` account is created at startup from the
-  `Admin:*` settings.
-- `POST /api/auth/login` returns a JWT (`{ token, expiresAt }`). Send it as `Authorization: Bearer <token>`.
-- In Development, three test users are seeded: `ali@test.local`, `ayse@test.local`, `can@test.local`,
-  all with the password `Passw0rd!`.
-- [`TicketReservationApi.http`](src/TicketReservationApi.Api/TicketReservationApi.http) logs in and reuses
-  the tokens automatically (Visual Studio / VS Code REST Client).
+## API
 
-Integration tests create and use a separate `TicketReservation_Tests` database:
+| Method | Path | Access | Description |
+|---|---|---|---|
+| POST | `/api/auth/register` | Anonymous | Create a `User` account |
+| POST | `/api/auth/login` | Anonymous | Returns `{ token, expiresAt }` |
+| GET | `/api/events` | Anonymous | List events (filters and paging below) |
+| GET | `/api/events/{id}` | Anonymous | Event details |
+| POST | `/api/events` | Admin | Create an event |
+| PUT | `/api/events/{id}` | Admin | Update an event |
+| PATCH | `/api/events/{id}/cancel` | Admin | Cancel an event and its reservations |
+| GET | `/api/events/{id}/reservations` | Admin | Reservations of an event |
+| POST | `/api/reservations` | User | Reserve a seat: `{ "eventId": "…" }` |
+| GET | `/api/reservations/me` | User | My reservations |
+| PATCH | `/api/reservations/{id}/cancel` | User | Cancel my reservation |
 
-```bash
-dotnet test
-```
+Send the token as `Authorization: Bearer <token>`. Registration always creates a `User`; the `Admin`
+account is created at startup from the `Admin:*` settings.
 
 ### Listing events
 
@@ -69,6 +120,42 @@ Results are ordered by start time. Invalid values return `400`.
   "totalCount": 42
 }
 ```
+
+### Errors
+
+All errors use ProblemDetails. Business rule violations include the rule id from the table below:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.10",
+  "title": "Conflict.",
+  "status": 409,
+  "detail": "Event is fully booked.",
+  "rule": "K1"
+}
+```
+
+| Status | Meaning |
+|---|---|
+| 400 | Validation error (`errors` lists each invalid field) |
+| 401 / 403 | Not authenticated / wrong role |
+| 404 | Not found, including other users' reservations |
+| 409 | Conflict: event full, duplicate reservation, email taken, concurrent modification |
+| 422 | Business rule violation |
+
+## Business rules
+
+| # | Rule | Status |
+|---|---|---|
+| K1 | A full event cannot be reserved | 409 |
+| K2 | One active reservation per user and event | 409 |
+| K3 | Past or cancelled events cannot be reserved | 422 |
+| K4 | Reservations cannot be cancelled less than 24 hours before the event | 422 |
+| K5 | Cancelling a reservation frees its seat | — |
+| K6 | Capacity cannot be reduced below the number of reservations | 422 |
+| K7 | Users only see and cancel their own reservations (others' are reported as not found) | 404 |
+| K8 | Cancelling an event cancels all its active reservations | — |
+| K9 | Cancelled or started events cannot be updated; an event cannot be moved into the past | 422 / 400 |
 
 ## Concurrency
 
@@ -133,3 +220,25 @@ The database statements are what actually guarantee the rules.
 `RowVersion` remains on `Event` for admin operations (update, cancel): those use tracked entities, and any
 concurrent reservation changes the row version, so a stale admin update gets a 409 instead of silently
 overwriting `ReservedCount`.
+
+## Tests
+
+```bash
+dotnet test
+```
+
+The integration tests need the local SQL Server; they create (and recreate on every run) a separate
+`TicketReservation_Tests` database. The unit tests need nothing.
+
+| Project | What it covers |
+|---|---|
+| **UnitTests** | `EventRules`, `ReservationRules` (K1, K3, K4, K6–K9) and validators, with a fixed clock (`FakeTimeProvider`). Rules are plain functions over entities, so no database or mocks are needed. |
+| **IntegrationTests** | The full HTTP pipeline with real JWTs against SQL Server: every rule end to end with its status code and rule id (`BusinessRuleTests`), authentication and roles (`AuthTests`), the event list (`EventListTests`) and the concurrency scenarios (`ConcurrencyTests`). |
+
+K2 and K5 are enforced by the database (unique index, atomic updates), so they are covered by integration
+tests only.
+
+## Not in scope (yet)
+
+Seat numbers, waiting lists, email notifications, payments, caching, rate limiting, refresh tokens,
+Docker and CI. See [PLAN.md](PLAN.md#1-scope).

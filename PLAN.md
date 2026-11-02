@@ -166,7 +166,7 @@ All error responses use the **ProblemDetails** format.
 - Global exception handling (`IExceptionHandler` + ProblemDetails)
   - `DbUpdateConcurrencyException` → 409
   - Unique index violation (`SqlException` 2601 / 2627) → 409
-- **xUnit** + **NSubstitute**; integration tests with `WebApplicationFactory` and a test database on local SQL Server
+- **xUnit**; unit tests on pure rule functions with `FakeTimeProvider`; integration tests with `WebApplicationFactory` and a test database on local SQL Server
 - OpenAPI + **Scalar** UI (with JWT support)
 
 **Layers**
@@ -212,7 +212,7 @@ tests/
 - [x] **4. Concurrency experiment** — Section 7; the integration test project is set up here
 - [x] **5. Auth** — Register / login, JWT, roles, admin seed; `UserId` now comes from the token
 - [x] **6. Business rules and queries** — Remaining rules (K3–K9, implemented alongside steps 2–3), filtering, pagination
-- [ ] **7. Tests and documentation** — Unit tests (K1–K9), remaining integration tests, README
+- [x] **7. Tests and documentation** — Unit tests (K1–K9), remaining integration tests, README
 
 ---
 
@@ -239,3 +239,4 @@ tests/
 | 2026-11-02 | ~~Event list returns past and cancelled events unless `onlyAvailable=true`~~ (superseded below) | One endpoint serves both browsing and booking; each item carries its `status` |
 | 2026-11-02 | `from` / `to` are inclusive; out-of-range `page` / `pageSize` return 400 instead of being clamped | Predictable behaviour; clients learn about mistakes instead of getting silently different results |
 | 2026-11-02 | `from` defaults to now: the event list shows upcoming events (cancelled and full ones included) | Ordered by start time, past events would otherwise fill the first pages; past events remain available via an explicit `from` |
+| 2026-11-02 | Rules extracted into pure functions (`EventRules`, `ReservationRules`); unit tests without NSubstitute | Services rely on `ExecuteUpdateAsync` and transactions, which cannot be mocked or run on the InMemory provider; pure functions are testable directly. DB-enforced rules (K2, K5) are covered by integration tests |

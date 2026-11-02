@@ -102,16 +102,11 @@ public class EventService(
     {
         await updateValidator.ValidateAndThrowAsync(request, cancellationToken);
 
-        var ev = await FindAsync(id, cancellationToken);
+        var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == id, cancellationToken)
+            ?? throw new NotFoundException(nameof(Event), id);
 
-        EnsureModifiable(ev);
-
-        // K6
-        if (request.Capacity < ev.ReservedCount)
-        {
-            throw new BusinessRuleException("K6",
-                $"Capacity cannot be lower than the current reservation count ({ev.ReservedCount}).");
-        }
+        EventRules.EnsureModifiable(ev, timeProvider.GetUtcNow());
+        EventRules.EnsureCapacityCoversReservations(ev, request.Capacity);
 
         ev.Title = request.Title;
         ev.Description = request.Description;
@@ -131,39 +126,12 @@ public class EventService(
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken)
             ?? throw new NotFoundException(nameof(Event), id);
 
-        EnsureModifiable(ev);
-
         var now = timeProvider.GetUtcNow();
 
-        ev.Status = EventStatus.Cancelled;
+        EventRules.EnsureModifiable(ev, now);
+        EventRules.Cancel(ev, now);
 
-        // K8
-        foreach (var reservation in ev.Reservations)
-        {
-            reservation.Status = ReservationStatus.Cancelled;
-            reservation.CancelledAt = now;
-        }
-
-        ev.ReservedCount = 0;
-
+        // RowVersion check: a reservation made since loading the event causes a 409 instead of a lost update
         await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task<Event> FindAsync(Guid id, CancellationToken cancellationToken) =>
-        await db.Events.FirstOrDefaultAsync(e => e.Id == id, cancellationToken)
-            ?? throw new NotFoundException(nameof(Event), id);
-
-    // K9
-    private void EnsureModifiable(Event ev)
-    {
-        if (ev.Status == EventStatus.Cancelled)
-        {
-            throw new BusinessRuleException("K9", "Cancelled events cannot be modified.");
-        }
-
-        if (ev.StartsAt <= timeProvider.GetUtcNow())
-        {
-            throw new BusinessRuleException("K9", "Events that have already started cannot be modified.");
-        }
     }
 }

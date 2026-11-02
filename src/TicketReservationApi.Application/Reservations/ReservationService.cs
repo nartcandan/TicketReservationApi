@@ -20,9 +20,7 @@ public class ReservationService(
     TimeProvider timeProvider,
     IValidator<CreateReservationRequest> createValidator) : IReservationService
 {
-    private static readonly TimeSpan CancellationCutoff = TimeSpan.FromHours(24);
-
-    // The checks below give early, descriptive errors. Under concurrency the real guarantees are
+    // The early checks give descriptive errors. Under concurrency the real guarantees are
     // the atomic conditional UPDATE (K1) and the filtered unique index (K2). See PLAN.md, section 7.
     public async Task<ReservationResponse> CreateAsync(Guid userId, CreateReservationRequest request, CancellationToken cancellationToken)
     {
@@ -31,16 +29,7 @@ public class ReservationService(
         var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken)
             ?? throw new NotFoundException(nameof(Event), request.EventId);
 
-        // K3
-        if (ev.Status == EventStatus.Cancelled)
-        {
-            throw new BusinessRuleException("K3", "Cannot reserve a cancelled event.");
-        }
-
-        if (ev.StartsAt <= timeProvider.GetUtcNow())
-        {
-            throw new BusinessRuleException("K3", "Cannot reserve an event that has already started.");
-        }
+        ReservationRules.EnsureReservable(ev, timeProvider.GetUtcNow());
 
         // K2
         var alreadyReserved = await db.Reservations.AnyAsync(
@@ -50,12 +39,6 @@ public class ReservationService(
         if (alreadyReserved)
         {
             throw new ConflictException("K2", "User already has an active reservation for this event.");
-        }
-
-        // K1
-        if (ev.ReservedCount >= ev.Capacity)
-        {
-            throw new ConflictException("K1", "Event is fully booked.");
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -95,25 +78,14 @@ public class ReservationService(
             .Include(r => r.Event)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-        // K7: someone else's reservation is reported as not found
-        if (reservation is null || reservation.UserId != userId)
+        if (reservation is null)
         {
             throw new NotFoundException(nameof(Reservation), id);
         }
 
-        if (reservation.Status == ReservationStatus.Cancelled)
-        {
-            throw new BusinessRuleException(null, "Reservation is already cancelled.");
-        }
-
         var now = timeProvider.GetUtcNow();
 
-        // K4
-        if (reservation.Event.StartsAt - now < CancellationCutoff)
-        {
-            throw new BusinessRuleException("K4",
-                "Reservations cannot be cancelled less than 24 hours before the event starts.");
-        }
+        ReservationRules.EnsureCancellable(reservation, userId, now);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
